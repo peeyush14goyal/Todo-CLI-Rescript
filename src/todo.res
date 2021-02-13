@@ -39,50 +39,53 @@ NOTE: The code below is provided just to show you how to use the
 date and file functions defined above. Remove it to begin your implementation.
 */
 
-let pending_todos_file = "todo.txt"
-let completed_todos_file = "done.txt"
+let pendingTodosFile = "todo.txt"
+let completedTodosFile = "done.txt"
 
-if !existsSync(pending_todos_file) {
-  writeFileSync(pending_todos_file, "", {encoding: encoding, flag: "w"})
-} else {
-  ()
+if !existsSync(pendingTodosFile) {
+  writeFileSync(pendingTodosFile, "", {encoding: encoding, flag: "w"})
 }
 
-if !existsSync(completed_todos_file) {
-  writeFileSync(completed_todos_file, "", {encoding: encoding, flag: "w"})
-} else {
-  ()
+if !existsSync(completedTodosFile) {
+  writeFileSync(completedTodosFile, "", {encoding: encoding, flag: "w"})
 }
 
 type arg =
-  | Add(string)
-  | Delete(int)
-  | Done(int)
+  | Add(option<string>)
+  | Delete(option<int>)
+  | Done(option<int>)
   | Help
   | Report
   | List
-  | Empty
 
-let read_file = (filename) => {
-   let data = readFileSync(`./${filename}`, {encoding: "utf8", flag: "r"})
-  let data_array = Js.String.split("\n", data)
-  let data_array = Js.Array.filter((x) => x != "", data_array)
-  data_array
+let readFile = (filename) => {
+
+  if (!existsSync(filename)) {
+     []
+  }
+  else {
+   let text = readFileSync(filename, {encoding: "utf8", flag: "r"})
+  let lines = Js.String.split(eol, text)
+  let lines = Js.Array.filter(text => Js.String.length(text) > 0, lines)
+  lines
+  }
 }
 
-let append_file = (filename, data) => {
-  appendFileSync(`./${filename}`, data , {encoding: "utf8", flag: "a"})
+let appendFile = (filename, text) => {
+  appendFileSync(filename, text , {encoding: "utf8", flag: "a"})
 }
 
-let write_file = (filename, data) => {
-  writeFileSync(`./${filename}`, data, {encoding: encoding, flag: "w"})
+let writeFile = (filename, lines) => {
+  let text = Js.Array.joinWith(eol, lines)
+  writeFileSync(filename, text, {encoding: encoding, flag: "w"})
 }
 
-let list_of_todos = () => {
- let data_array = read_file(pending_todos_file)
 
-  if Belt.Array.length(data_array) > 0 {
-    let array = Js.Array.reverseInPlace(data_array)
+let listOfTodos = () => {
+ let data = readFile(pendingTodosFile)
+
+  if Belt.Array.length(data) > 0 {
+    let array = Js.Array.reverseInPlace(data)
 
     Js.Array.forEachi((todo, index) => {
       let index_val = Belt.Int.toString(Belt.Array.length(array) - index)
@@ -95,8 +98,8 @@ let list_of_todos = () => {
 
 }
 
-let add_todos = (todo) => {
-  append_file(pending_todos_file, todo ++ eol)
+let addTodo = (todo) => {
+  appendFile(pendingTodosFile, todo ++ eol)
   Js.log(`Added todo: "${todo}"`)
 }
 
@@ -113,111 +116,99 @@ let help = () => {
 }
 
 let completed = (index_val) => {
-  let data_array = read_file(pending_todos_file)
-  if index_val > Belt.Array.length(data_array) || index_val < 1 {
+  let data = readFile(pendingTodosFile)
+
+  if index_val > Belt.Array.length(data) || index_val < 1 {
     Js.log(`Error: todo #${Belt.Int.toString(index_val)} does not exist.`)
   }
   else {
-    let todo = data_array[index_val - 1]
-    append_file(completed_todos_file, getToday() ++ " " ++ todo ++ eol)
-    let data_array = Js.Array.filteri((_, index) => (index + 1) != index_val, data_array)
-    let data_string =Js.Array.joinWith(eol, data_array)
-    write_file(pending_todos_file, data_string)
+    let todo = data[index_val - 1]
+    appendFile(completedTodosFile, todo ++ eol)
+
+    let _ = Js.Array.spliceInPlace(~pos = index_val-1,~remove = 1,~add = [], data)
+    writeFile(pendingTodosFile, data)
     Js.log(`Marked todo #${Belt.Int.toString(index_val)} as done.`)
   }
 }
 
-let delete_todo = (index_val) => {
-  let data_array = read_file(pending_todos_file)
-  if index_val > Js.Array.length(data_array) || index_val < 1 {
+let deleteTodo = (index_val) => {
+  let data = readFile(pendingTodosFile)
+
+  if index_val > Js.Array.length(data) || index_val < 1 {
     Js.log(`Error: todo #${Belt.Int.toString(index_val)} does not exist. Nothing deleted.`)
   }
   else {
-    let data_array = Js.Array.filteri((_, index) => (index + 1) != index_val, data_array)
-    let data_string =Js.Array.joinWith(eol, data_array)
-    write_file(pending_todos_file, data_string)
+    let _ = Js.Array.spliceInPlace(~pos = index_val-1,~remove = 1,~add = [], data)
+    writeFile(pendingTodosFile, data)
     Js.log(`Deleted todo #${Belt.Int.toString(index_val)}`)
   }
 }
 
 let report = () => {
-  let pending = read_file(pending_todos_file)
-  let completed = read_file(completed_todos_file)
+  let pending = readFile(pendingTodosFile)
+  let completed = readFile(completedTodosFile)
   let pending_count = Belt.Int.toString(Js.Array.length(pending))
   let completed_count = Belt.Int.toString(Js.Array.length(completed))
   Js.log(`${getToday()} Pending : ${pending_count} Completed : ${completed_count}`)
 }
 
-let exe_command = command =>
+
+let exeCommand = command =>
 switch command {
-| Add(str) => add_todos(str)
-| Delete(index) => delete_todo(index)
-| List => list_of_todos()
-| Done(index) => completed(index)
+| Add(str) => {
+    switch str {
+      | Some(x) => addTodo(x)
+      | None => Js.log("Error: Missing todo string. Nothing added!")
+    }
+  }
+| Delete(index) => {
+    switch index {
+      | Some(x) => deleteTodo(x)
+      | None => Js.log("Error: Missing NUMBER for deleting todo.")
+    }
+  }
+| List => listOfTodos()
+| Done(index) => {
+    switch index {
+      | Some(x) => completed(x)
+      | None => Js.log("Error: Missing NUMBER for marking todo as done.")
+    }
+  }
 | Help => help()
 | Report => report()
-| Empty => ()
 }
 
-let value_from_option = x => {
-  switch x {
-  | None => -1
-  | Some(x) => x
-  }
-}
 
-let get_type = (argument, argv) => {
 
-  if argument == "add" {
-    if Js.Array.length(argv) > 3 {
-      Add(argv[3])
+let getType = (argument, argv) => {
+
+  switch argument {
+  | "add" => {
+      let value = argv->Belt.Array.get(3)
+      Add(value)
     }
-    else {
-      Js.log("Error: Missing todo string. Nothing added!")
-      Empty
-    }
-
-  }
-  else if argument == "del" {
-    if Js.Array.length(argv) > 3 {
-      let index = argv[3]
-      let value = value_from_option(Belt.Int.fromString(index))
+  | "del" => {
+      let value = argv->Belt.Array.get(3)->Belt.Option.flatMap(Belt.Int.fromString)
       Delete(value)
     }
-    else {
-      Js.log("Error: Missing NUMBER for deleting todo.")
-      Empty
-    }
-  }
-  else if argument == "done" {
-    if Js.Array.length(argv) > 3 {
-      let index = argv[3]
-      let value = value_from_option(Belt.Int.fromString(index))
+
+  | "done" => {
+      let value = argv->Belt.Array.get(3)->Belt.Option.flatMap(Belt.Int.fromString)
       Done(value)
-    }
-    else {
-      Js.log("Error: Missing NUMBER for marking todo as done.")
-      Empty
-    }
   }
-  else if argument == "ls" {
-    List
-  }
-  else if argument == "report"{
-    Report
-  }
-  else{
-    Help
+  | "ls" => List
+  | "report" => Report
+  | _ => Help
   }
 }
 
-let argv = %raw(`process.argv`)
+@val @scope("process") external argv: array<string> = "argv"
 
 if Js.Array.length(argv) < 3 {
   Js.log(usage)
 }
 else {
   let command = argv[2];
-  let command_type = get_type(command, argv)
-  exe_command(command_type)
+  let command_type = getType(command, argv)
+  exeCommand(command_type)
 }
